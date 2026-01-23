@@ -1,176 +1,107 @@
-# 📄 DocxStudio
+# DocxStudio
 
-<p align="center">
-  <strong>Web-based DOCX editor with style preservation and AI assistance</strong>
-</p>
+A web app for editing Word documents with AI. Upload a `.docx`, describe what you want to change in plain language, and download the modified file with all original formatting preserved.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.11+-blue?style=flat-square&logo=python" alt="Python">
-  <img src="https://img.shields.io/badge/FastAPI-0.109+-green?style=flat-square&logo=fastapi" alt="FastAPI">
-  <img src="https://img.shields.io/badge/React-18+-61DAFB?style=flat-square&logo=react" alt="React">
-  <img src="https://img.shields.io/badge/Vite-5+-646CFF?style=flat-square&logo=vite" alt="Vite">
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License">
-</p>
+## Overview
 
----
+I built this because editing DOCX files programmatically usually breaks formatting. This tool uses `python-docx` to make surgical edits while keeping styles intact.
 
-## ✨ Features
+The AI doesn't regenerate your document—it calls specific editing functions ("tools") based on what you ask for. So when you say "change 2025 to 2026", it literally finds and replaces that text, preserving fonts, colors, and layout.
 
-- **📤 Drag & Drop Upload** - Simple file upload with instant document parsing
-- **🔍 Find & Replace** - Bulk text replacement preserving original formatting
-- **🎨 Style Changes** - Modify colors, bold, italic across matching text
-- **🤖 AI Assistant** - Describe changes in natural language
-- **📥 Download** - Export your edited document maintaining all styles
-- **🌙 Dark Mode** - Beautiful modern dark theme UI
+## Features
 
-## 🖥️ Screenshot
+- Upload any `.docx` file and see a live preview
+- Natural language editing ("make all headings blue", "replace the old date")
+- Streaming responses so you see progress in real time
+- Downloads preserve the original Word formatting
+- Dark theme UI
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  🔷 DocxStudio                           [New] [Download]   │
-├─────────────────────────────────────────────────────────────┤
-│                        │                                    │
-│    Document Preview    │   🔍 Find & Replace               │
-│    ───────────────     │   ────────────────                │
-│                        │   Find: [2025       ]             │
-│    [Your document      │   Replace: [2026    ]             │
-│     rendered as        │   [+ Add More] [Apply]            │
-│     styled HTML]       │                                    │
-│                        │   🎨 Change Styles                │
-│                        │   ─────────────────                │
-│                        │   Match: ● Bold ○ Red             │
-│                        │   Apply: ● Purple                 │
-│                        │                                    │
-│                        │   🤖 AI Assistant                 │
-│                        │   "Change all dates to 2026..."   │
-└─────────────────────────────────────────────────────────────┘
-```
+## Tech Stack
 
-## 🚀 Quick Start
+**Frontend:** Next.js 16, React 19, Tailwind 4, Framer Motion
+
+**Backend:** FastAPI (Python), python-docx for document manipulation
+
+**AI:** Connects to my Nexus Gateway which routes to Gemini/OpenAI with tool calling
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 20+
+- Access to an OpenAI-compatible API (or my Nexus Gateway)
 
 ### Local Development
 
-**1. Start Backend:**
 ```bash
+# Backend
 cd backend
 python -m venv venv
-.\venv\Scripts\activate  # Windows
-# source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate  # or source venv/bin/activate on Mac/Linux
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
+uvicorn main:app --reload
 
-**2. Start Frontend (new terminal):**
-```bash
+# Frontend (separate terminal)
 cd frontend
 npm install
 npm run dev
 ```
 
-**3. Open:** http://localhost:3000
+Open `http://localhost:3000`
 
-### Docker (Local)
-
-```bash
-docker-compose -f docker-compose.dev.yml up --build
-```
-Open http://localhost:3000
-
-### Docker (Production - Coolify)
+### Docker
 
 ```bash
-# In Coolify, point to this repo and use docker-compose.yml
-# Configure environment variables:
-# - NEXUS_GATEWAY_URL=https://api.ramsesdb.tech
-# - NEXUS_API_KEY=your_key
+docker compose up
 ```
 
-## 🏗️ Architecture
+### Environment Variables
+
+Create `.env` in the root:
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│     Frontend    │────▶│     Backend     │────▶│  Nexus Gateway  │
-│  React + Vite   │     │    FastAPI      │     │   (AI API)      │
-│    Port 3000    │     │   Port 8000     │     │                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+NEXUS_GATEWAY_URL=https://api.ramsesdb.tech
+NEXUS_API_KEY=your_key
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 docx-studio/
 ├── backend/
-│   ├── main.py              # FastAPI app
+│   ├── main.py              # FastAPI with streaming endpoint
 │   ├── services/
-│   │   ├── parser.py        # DOCX → JSON
-│   │   ├── editor.py        # Text replacement
+│   │   ├── editor.py        # Text replacement logic
 │   │   ├── styler.py        # Style modifications
-│   │   └── ai_assistant.py  # AI integration
-│   ├── models/
-│   │   └── schemas.py       # Pydantic models
-│   └── Dockerfile
-│
+│   │   ├── tools.py         # AI tool definitions
+│   │   └── guardrails.py    # Input validation
+│   └── utils/
+│       └── streamer.py      # SSE event formatting
 ├── frontend/
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── components/
-│   │   │   ├── DropZone.jsx
-│   │   │   ├── DocumentPreview.jsx
-│   │   │   ├── ReplacePanel.jsx
-│   │   │   ├── StylePanel.jsx
-│   │   │   └── AiChat.jsx
-│   │   └── styles/
-│   │       └── index.css
-│   └── Dockerfile
-│
-├── docker-compose.yml
-└── README.md
+│   └── src/
+│       ├── app/             # Next.js pages
+│       ├── components/      # React components
+│       └── lib/             # API client
+└── docker-compose.yml
 ```
 
-## 🔌 API Endpoints
+## How the AI Works
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/upload` | Upload DOCX file |
-| `POST` | `/api/replace` | Find & replace text |
-| `POST` | `/api/style` | Modify styles |
-| `POST` | `/api/ai-suggest` | Get AI suggestions |
-| `GET` | `/api/download/{id}` | Download edited file |
+The backend exposes these tools to the AI:
 
-## 🎯 Use Cases
+| Tool | What it does |
+|------|--------------|
+| `replace_text` | Finds and replaces text throughout the document |
+| `change_style` | Modifies colors, bold, italic based on matching criteria |
+| `get_document_stats` | Returns paragraph count, table count, styles used |
 
-- **Bulk Updates**: Change "2025" to "2026" across all documents
-- **Rebranding**: Replace company names while keeping formatting
-- **Style Fixes**: Convert all red bold text to purple
-- **AI Editing**: "Make all headings blue and remove italic from body"
+When you send a message, the AI decides which tool(s) to call, the backend executes them on your actual `.docx` file, and streams back the results.
 
-## 🛠️ Tech Stack
+## Author
 
-**Backend:**
-- Python 3.11+
-- FastAPI
-- python-docx
-- Pydantic
+Built by [Ramses Briceño](https://ramsesdb.tech)
 
-**Frontend:**
-- React 18
-- Vite 5
-- react-dropzone
-- Vanilla CSS (custom design system)
+## License
 
-## 📜 License
-
-MIT License - feel free to use this project for personal or commercial purposes.
-
-## 👤 Author
-
-**Ramses Briceño**
-
-- Portfolio: [ramsesdb.tech](https://ramsesdb.tech)
-- GitHub: [@Ramsesdb](https://github.com/Ramsesdb)
-
----
-
-<p align="center">
-  Made with ☕ and 🎵
-</p>
+MIT

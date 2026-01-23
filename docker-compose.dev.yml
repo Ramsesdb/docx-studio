@@ -1,16 +1,4 @@
-version: '3.8'
-
-# Development docker-compose - use this for local testing
-# Usage: docker-compose -f docker-compose.dev.yml up --build
-
 services:
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
-
   backend:
     build: ./backend
     ports:
@@ -18,3 +6,24 @@ services:
     environment:
       - NEXUS_GATEWAY_URL=${NEXUS_GATEWAY_URL:-https://api.ramsesdb.tech}
       - NEXUS_API_KEY=${NEXUS_API_KEY:-}
+    volumes:
+      - ./backend:/app
+      - docx-temp:/app/temp
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+    depends_on:
+      - backend
+
+volumes:
+  docx-temp:
