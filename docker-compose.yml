@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.docx-frontend.rule=Host(`docx.ramsesdb.tech`)"
+      - "traefik.http.routers.docx-frontend.entrypoints=https"
+      - "traefik.http.routers.docx-frontend.tls=true"
+      - "traefik.http.routers.docx-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.docx-frontend.loadbalancer.server.port=80"
+    networks:
+      - coolify
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      - NEXUS_GATEWAY_URL=${NEXUS_GATEWAY_URL:-https://api.ramsesdb.tech}
+      - NEXUS_API_KEY=${NEXUS_API_KEY:-}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.docx-backend.rule=Host(`docx.ramsesdb.tech`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.docx-backend.entrypoints=https"
+      - "traefik.http.routers.docx-backend.tls=true"
+      - "traefik.http.routers.docx-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.docx-backend.loadbalancer.server.port=8000"
+    networks:
+      - coolify
+
+networks:
+  coolify:
+    external: true

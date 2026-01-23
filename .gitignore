@@ -1,0 +1,20 @@
+# Backend
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# Frontend
+node_modules/
+dist/
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Temp files
+*.docx
+!tests/*.docx
+tmp/
