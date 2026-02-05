@@ -90,15 +90,19 @@ export default function Home() {
           <DropZone onUpload={handleUpload} isLoading={isLoading} />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-120px)]">
-            <DocumentPreview
-              htmlPreview={document.html_preview}
-              filename={document.filename}
-              stats={document.stats}
-            />
-            <AiChat
-              sessionId={document.session_id}
-              onPreviewUpdate={handlePreviewUpdate}
-            />
+            <div className="min-h-0">
+              <DocumentPreview
+                htmlPreview={document.html_preview}
+                filename={document.filename}
+                stats={document.stats}
+              />
+            </div>
+            <div className="min-h-0">
+              <AiChat
+                sessionId={document.session_id}
+                onPreviewUpdate={handlePreviewUpdate}
+              />
+            </div>
           </div>
         )}
       </main>
@@ -111,8 +115,8 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
             className={`fixed bottom-6 right-6 px-6 py-3 rounded-xl shadow-lg ${toast.type === 'success'
-                ? 'bg-[var(--success)] text-white'
-                : 'bg-[var(--error)] text-white'
+              ? 'bg-[var(--success)] text-white'
+              : 'bg-[var(--error)] text-white'
               }`}
           >
             {toast.message}

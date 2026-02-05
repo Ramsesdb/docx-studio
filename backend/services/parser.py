@@ -13,7 +13,14 @@ def rgb_to_hex(color: Optional[RGBColor]) -> Optional[str]:
     """Convert RGBColor to hex string."""
     if color is None:
         return None
-    return f"#{color.red:02x}{color.green:02x}{color.blue:02x}"
+    # RGBColor is a tuple-like object with indexing [0]=red, [1]=green, [2]=blue
+    try:
+        return f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
+    except (TypeError, IndexError):
+        # Fallback: try as integer representing RGB value
+        if isinstance(color, int):
+            return f"#{color:06x}"
+        return None
 
 
 def get_run_info(run) -> dict:

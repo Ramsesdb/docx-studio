@@ -19,12 +19,15 @@ When the user describes changes they want to make, respond with a JSON object co
 2. "style_changes": array of {match, apply} objects for formatting changes
 3. "explanation": a brief explanation of what changes you're suggesting
 
-Match criteria can include: bold, italic, color (hex), style (heading name)
-Apply changes can include: bold, italic, underline, color (hex)
+Match criteria can include: bold, italic, color (hex or name), style (heading name)
+Apply changes can include: bold, italic, underline, color (hex or name)
+
+Important: You CAN match by color alone without requiring specific text. Do NOT claim you need exact text when the user asks to change by color.
 
 Examples:
 - "Change 2025 to 2026" → {"replacements": [{"find": "2025", "replace": "2026"}], ...}
 - "Make red text purple" → {"style_changes": [{"match": {"color": "#ff0000"}, "apply": {"color": "#800080"}}], ...}
+- "Change all purple text to red" → {"style_changes": [{"match": {"color": "purple"}, "apply": {"color": "red"}}], ...}
 - "Remove bold from titles" → {"style_changes": [{"match": {"style": "Heading", "bold": true}, "apply": {"bold": false}}], ...}
 
 Always respond with valid JSON only. No markdown code blocks."""

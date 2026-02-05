@@ -79,10 +79,11 @@ export default function AiChat({ sessionId, onPreviewUpdate }: AiChatProps) {
             const decoder = new TextDecoder();
             let buffer = '';
             let fullContent = '';
+            let shouldStop = false;
 
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) break;
+                if (done || shouldStop) break;
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
@@ -97,6 +98,17 @@ export default function AiChat({ sessionId, onPreviewUpdate }: AiChatProps) {
                         const parsed = JSON.parse(data);
 
                         // Handle different event types from Python backend
+                        if (parsed.type === 'finish') {
+                            shouldStop = true;
+                            try {
+                                await reader.cancel();
+                            } catch (_) {
+                                // ignore cancel errors
+                            }
+                            setStatus('ready');
+                            continue;
+                        }
+
                         if (parsed.type === 'text-delta' && parsed.textDelta) {
                             fullContent += parsed.textDelta;
                             setMessages(prev =>
@@ -121,6 +133,14 @@ export default function AiChat({ sessionId, onPreviewUpdate }: AiChatProps) {
 
             setStatus('ready');
         } catch (error) {
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                setStatus('ready');
+                return;
+            }
+            if (error instanceof Error && error.message.toLowerCase().includes('aborted')) {
+                setStatus('ready');
+                return;
+            }
             console.error('[Chat] Error:', error);
             setStatus('error');
             // Remove empty assistant message on error
@@ -187,10 +207,13 @@ export default function AiChat({ sessionId, onPreviewUpdate }: AiChatProps) {
                                     className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
                                             ? 'bg-[var(--primary)] text-white'
                                             : 'bg-[var(--card-hover)] text-[var(--foreground)]'
-                                        }`}
+                                        } ${isAssistant && isLoading ? 'opacity-80' : ''}`}
                                 >
                                     {isEmptyAssistant ? (
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-sm text-[var(--muted)] animate-pulse blur-[0.5px]">
+                                                Pensando...
+                                            </span>
                                             <div className="flex gap-1">
                                                 <span className="w-2 h-2 bg-[var(--primary)] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                                                 <span className="w-2 h-2 bg-[var(--primary)] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -216,14 +239,15 @@ export default function AiChat({ sessionId, onPreviewUpdate }: AiChatProps) {
             </div>
 
             {/* Input */}
-            <form onSubmit={handleSubmit} className="p-4 border-t border-[var(--border)]">
-                <div className="flex gap-2">
+            <form onSubmit={handleSubmit} className="p-4 border-t border-[var(--border)]" aria-busy={isLoading}>
+                <div className={`flex gap-2 ${isLoading ? 'opacity-80' : ''}`}>
                     <input
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         placeholder="What would you like to change?"
                         disabled={isLoading}
+                        readOnly={isLoading}
                         className="flex-1 px-4 py-3 rounded-xl bg-[var(--card-hover)] border border-[var(--border)] 
               text-[var(--foreground)] placeholder-[var(--muted)]
               focus:outline-none focus:border-[var(--primary)] transition-colors

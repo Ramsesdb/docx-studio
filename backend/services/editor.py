@@ -47,7 +47,23 @@ def replace_in_paragraph(paragraph, old_text: str, new_text: str,
     for run in paragraph.runs:
         if replace_text_in_run(run, old_text, new_text, case_sensitive):
             replaced = True
-    return replaced
+
+    if replaced:
+        return True
+
+    # Fallback: replace across run boundaries (may lose inline formatting in this paragraph)
+    if paragraph.text:
+        if case_sensitive:
+            if old_text in paragraph.text:
+                paragraph.text = paragraph.text.replace(old_text, new_text)
+                return True
+        else:
+            pattern = re.compile(re.escape(old_text), re.IGNORECASE)
+            if pattern.search(paragraph.text):
+                paragraph.text = pattern.sub(new_text, paragraph.text)
+                return True
+
+    return False
 
 
 def replace_in_document(

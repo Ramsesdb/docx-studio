@@ -13,21 +13,28 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
 
+# Load environment variables from parent directory
+from dotenv import load_dotenv
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
+
 import docx
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 
-try:
-    from services.parser import parse_document, generate_html_preview
-    from services.editor import replace_in_document
-    from services.styler import apply_style_changes
-    from services.tools import AVAILABLE_TOOLS, ReplaceTextTool, ChangeStyleTool, GetDocumentStatsTool
-    from services.guardrails import sanitize_input, contains_suspicious_patterns
-    from utils.streamer import create_stream_event, create_tool_call_event, create_tool_result_event, create_text_delta_event, create_finish_event
-except ImportError:
-    # Fallback for when running without full structure (e.g. tests)
-    pass
+from services.parser import parse_document, generate_html_preview
+from services.editor import replace_in_document
+from services.styler import apply_style_changes
+from services.tools import AVAILABLE_TOOLS, ReplaceTextTool, ChangeStyleTool, GetDocumentStatsTool
+from services.guardrails import sanitize_input, contains_suspicious_patterns
+from utils.streamer import (
+    create_stream_event,
+    create_tool_call_event,
+    create_tool_result_event,
+    create_text_delta_event,
+    create_finish_event
+)
 
 # Configuration
 TEMP_DIR = Path("temp")
@@ -102,9 +109,18 @@ async def execute_tool_locally(tool_name: str, args: dict, session_id: str) -> d
         # Load document
         doc = docx.Document(str(doc_path))
         result_data = {}
-        
-        if tool_name == "replace_text":
-            replacements = [{"find": args["find"], "replace": args["replace"]}]
+
+        normalized_tool = tool_name
+        if tool_name == "change_text":
+            normalized_tool = "replace_text"
+
+        if normalized_tool == "replace_text":
+            find_value = args.get("find") or args.get("from") or args.get("old")
+            replace_value = args.get("replace") or args.get("to") or args.get("new")
+            if not find_value or replace_value is None:
+                return {"success": False, "error": "Missing 'find'/'replace' values for replace_text"}
+
+            replacements = [{"find": find_value, "replace": replace_value}]
             case_sensitive = args.get("case_sensitive", False)
             stats = replace_in_document(doc, replacements, case_sensitive)
             
@@ -117,7 +133,7 @@ async def execute_tool_locally(tool_name: str, args: dict, session_id: str) -> d
                 "preview_update_needed": True 
             }
             
-        elif tool_name == "change_style":
+        elif normalized_tool == "change_style":
             # Construct matching/apply dicts from args
             match = {}
             if args.get("match_bold") is not None: match["bold"] = args["match_bold"]
@@ -142,7 +158,7 @@ async def execute_tool_locally(tool_name: str, args: dict, session_id: str) -> d
                  "preview_update_needed": True
             }
 
-        elif tool_name == "get_document_stats":
+        elif normalized_tool == "get_document_stats":
             # Just return stats, no save needed
             input_bytes = doc_path.read_bytes()
             parsed = parse_document(input_bytes)
@@ -165,7 +181,7 @@ async def execute_tool_locally(tool_name: str, args: dict, session_id: str) -> d
 @app.post("/api/upload")
 async def upload_document(file: UploadFile = File(...)):
     """Uploads file to temp storage and creates session"""
-    if not file.filename.endswith('.docx'):
+    if not file.filename or not file.filename.endswith('.docx'):
         raise HTTPException(400, "Only .docx files are supported")
         
     cleanup_old_sessions()
@@ -230,7 +246,7 @@ async def chat_stream(request: Request):
     
     # Security Check
     if contains_suspicious_patterns(last_user_Message):
-         return JSONResponse({"error": "Request rejected by security guardrails"}, status=403)
+        return JSONResponse({"error": "Request rejected by security guardrails"}, status_code=403)
          
     clean_message = sanitize_input(last_user_Message)
     
@@ -273,14 +289,15 @@ async def chat_stream(request: Request):
                 response = await client.post(
                     f"{NEXUS_GATEWAY_URL}/v1/chat/completions",
                     headers={
-                        "Authorization": f"Bearer {NEXUS_API_KEY}",
+                        "Authorization": f"Bearer {NEXUS_API_KEY.replace('Bearer ', '').strip()}",
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "gemini-2.0-flash", # or gpt-4o-mini
+                        # Don't specify model - let the Gateway use its best available provider
                         "messages": api_messages,
                         "tools": tools_schema,
-                        "tool_choice": "auto"
+                        "tool_choice": "auto",
+                        "stream": False
                     }
                 )
                 
@@ -290,9 +307,72 @@ async def chat_stream(request: Request):
                     return
 
                 # Parse non-streaming response to see intent
-                data = response.json()
-                choice = data["choices"][0]
-                message = choice["message"]
+                if not response.content:
+                    yield create_text_delta_event("Error calling AI: empty response from gateway")
+                    yield create_finish_event("error")
+                    return
+
+                content_type = response.headers.get("content-type", "")
+                text_body = response.text or ""
+
+                if "text/event-stream" in content_type or text_body.lstrip().startswith("data:"):
+                    # Parse SSE chunks into a single assistant message
+                    full_text = ""
+                    last_error = ""
+                    for line in text_body.splitlines():
+                        if not line.startswith("data:"):
+                            continue
+                        payload = line.replace("data:", "", 1).strip()
+                        if not payload or payload == "[DONE]":
+                            continue
+                        try:
+                            item = json.loads(payload)
+                        except Exception:
+                            continue
+
+                        if isinstance(item, dict) and "error" in item:
+                            err = item.get("error", {})
+                            last_error = err.get("message") or str(err)
+                            continue
+
+                        choices = item.get("choices") if isinstance(item, dict) else None
+                        if choices:
+                            delta = choices[0].get("delta") if choices else None
+                            if delta and isinstance(delta, dict) and delta.get("content"):
+                                full_text += delta["content"]
+
+                    if last_error and not full_text:
+                        yield create_text_delta_event(f"Error calling AI: {last_error}")
+                        yield create_finish_event("error")
+                        return
+
+                    data = {
+                        "choices": [
+                            {"message": {"role": "assistant", "content": full_text}}
+                        ]
+                    }
+                else:
+                    try:
+                        data = response.json()
+                    except Exception:
+                        preview = text_body[:500] if text_body else ""
+                        yield create_text_delta_event(
+                            f"Error calling AI: invalid JSON response (content-type: {content_type}). {preview}"
+                        )
+                        yield create_finish_event("error")
+                        return
+                choices = data.get("choices") if isinstance(data, dict) else None
+                if not choices:
+                    yield create_text_delta_event("Error calling AI: missing 'choices' in response")
+                    yield create_finish_event("error")
+                    return
+
+                choice = choices[0]
+                message = choice.get("message") if isinstance(choice, dict) else None
+                if not isinstance(message, dict):
+                    yield create_text_delta_event("Error calling AI: invalid 'message' in response")
+                    yield create_finish_event("error")
+                    return
                 
                 # Check for tool call
                 if message.get("tool_calls"):
